@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gravity Ball</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0a0e1a;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: white;
+      }
+
+      #gameCanvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      .controls {
+        position: absolute;
+        top: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 0.5rem;
+        z-index: 1;
+      }
+
+      .controls button {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        color: white;
+        padding: 0.4rem 0.8rem;
+        cursor: pointer;
+      }
+
+      .controls button:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <button type="button" onclick="startGame()">Start</button>
+      <button type="button" onclick="resetGame()">Reset</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+      const canvas = document.getElementById('gameCanvas');
+      const context = canvas.getContext('2d');
+
+      const TIMESTEP = 1000 / 60;
+      let lastTimestamp = 0;
+      let accumulator = 0;
+      let animationFrameId = null;
+      let isRunning = false;
+
+      const inputState = {
+        ArrowUp: false,
+        ArrowDown: false,
+        ArrowLeft: false,
+        ArrowRight: false,
+      };
+
+      const circle = {
+        radius: 30,
+        position: { x: 0, y: 0 },
+        velocity: { x: 0, y: 0 },
+      };
+
+      const physics = {
+        acceleration: 600,
+        damping: 0.9,
+        maxSpeed: 500,
+      };
+
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      window.addEventListener('keydown', (event) => {
+        if (event.key in inputState) {
+          inputState[event.key] = true;
+          event.preventDefault();
+        }
+      });
+
+      window.addEventListener('keyup', (event) => {
+        if (event.key in inputState) {
+          inputState[event.key] = false;
+          event.preventDefault();
+        }
+      });
+
+      function resetCircle() {
+        circle.position.x = canvas.width / 2;
+        circle.position.y = canvas.height / 2;
+        circle.velocity.x = 0;
+        circle.velocity.y = 0;
+      }
+
+      function update(deltaSeconds) {
+        const accel = physics.acceleration;
+        if (inputState.ArrowUp) circle.velocity.y -= accel * deltaSeconds;
+        if (inputState.ArrowDown) circle.velocity.y += accel * deltaSeconds;
+        if (inputState.ArrowLeft) circle.velocity.x -= accel * deltaSeconds;
+        if (inputState.ArrowRight) circle.velocity.x += accel * deltaSeconds;
+
+        // Apply damping to simulate friction.
+        circle.velocity.x *= physics.damping;
+        circle.velocity.y *= physics.damping;
+
+        // Clamp speed.
+        const speed = Math.hypot(circle.velocity.x, circle.velocity.y);
+        if (speed > physics.maxSpeed) {
+          const scale = physics.maxSpeed / speed;
+          circle.velocity.x *= scale;
+          circle.velocity.y *= scale;
+        }
+
+        // Update position.
+        circle.position.x += circle.velocity.x * deltaSeconds;
+        circle.position.y += circle.velocity.y * deltaSeconds;
+
+        // Keep within bounds and bounce.
+        const { radius } = circle;
+        if (circle.position.x < radius) {
+          circle.position.x = radius;
+          circle.velocity.x *= -0.6;
+        } else if (circle.position.x > canvas.width - radius) {
+          circle.position.x = canvas.width - radius;
+          circle.velocity.x *= -0.6;
+        }
+
+        if (circle.position.y < radius) {
+          circle.position.y = radius;
+          circle.velocity.y *= -0.6;
+        } else if (circle.position.y > canvas.height - radius) {
+          circle.position.y = canvas.height - radius;
+          circle.velocity.y *= -0.6;
+        }
+      }
+
+      function render() {
+        // Background gradient.
+        const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, '#0a0e1a');
+        gradient.addColorStop(1, '#132347');
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw stars as subtle background effect.
+        context.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        for (let i = 0; i < 40; i += 1) {
+          const x = (i * 97) % canvas.width;
+          const y = (i * 47) % canvas.height;
+          context.beginPath();
+          context.arc(x, y, 2, 0, Math.PI * 2);
+          context.fill();
+        }
+
+        // Draw the moving circle.
+        context.beginPath();
+        context.arc(circle.position.x, circle.position.y, circle.radius, 0, Math.PI * 2);
+        context.fillStyle = '#4fc3f7';
+        context.fill();
+        context.lineWidth = 4;
+        context.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        context.stroke();
+      }
+
+      function gameLoop(timestamp) {
+        if (!isRunning) return;
+
+        const frameTime = timestamp - lastTimestamp;
+        lastTimestamp = timestamp;
+        accumulator += frameTime;
+
+        while (accumulator >= TIMESTEP) {
+          update(TIMESTEP / 1000);
+          accumulator -= TIMESTEP;
+        }
+
+        render();
+        animationFrameId = requestAnimationFrame(gameLoop);
+      }
+
+      function startGame() {
+        if (isRunning) return;
+        isRunning = true;
+        lastTimestamp = performance.now();
+        accumulator = 0;
+        animationFrameId = requestAnimationFrame(gameLoop);
+      }
+
+      function stopGame() {
+        isRunning = false;
+        if (animationFrameId !== null) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+        }
+      }
+
+      function resetGame() {
+        stopGame();
+        resetCircle();
+        render();
+        startGame();
+      }
+
+      window.startGame = startGame;
+      window.resetGame = resetGame;
+
+      // Initialize the scene before the game starts.
+      resetCircle();
+      render();
+      startGame();
+    </script>
+  </body>
+</html>
