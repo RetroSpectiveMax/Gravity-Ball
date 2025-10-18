@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gravity Ball</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0a0e1a;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: white;
+      }
+
+      #gameCanvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      .controls {
+        position: absolute;
+        top: 1rem;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 0.5rem;
+        z-index: 1;
+      }
+
+      .controls button {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        color: white;
+        padding: 0.4rem 0.8rem;
+        cursor: pointer;
+      }
+
+      .controls button:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="controls">
+      <button type="button" onclick="startGame()">Start</button>
+      <button type="button" onclick="resetGame()">Reset</button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+      const canvas = document.getElementById('gameCanvas');
+      const context = canvas.getContext('2d');
+
+      const TIMESTEP = 1000 / 60;
+      let lastTimestamp = 0;
+      let accumulator = 0;
+      let animationFrameId = null;
+      let isRunning = false;
+
+      const inputState = {
+        ArrowUp: false,
+        ArrowDown: false,
+        ArrowLeft: false,
+        ArrowRight: false,
+      };
+
+      const physics = {
+        gStrength: 400,
+        bounce: 0.85,
+        dt: 1 / 60,
+      };
+
+      const ball = {
+        x: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        radius: 30,
+      };
+
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      window.addEventListener('keydown', (event) => {
+        if (event.key in inputState) {
+          inputState[event.key] = true;
+          event.preventDefault();
+        }
+      });
+
+      window.addEventListener('keyup', (event) => {
+        if (event.key in inputState) {
+          inputState[event.key] = false;
+          event.preventDefault();
+        }
+      });
+
+      function resetBall() {
+        ball.x = canvas.width / 2;
+        ball.y = canvas.height / 2;
+        ball.vx = 0;
+        ball.vy = 0;
+      }
+
+      function update(deltaSeconds) {
+        let gx = 0;
+        let gy = 0;
+
+        if (inputState.ArrowUp) gy -= 1;
+        if (inputState.ArrowDown) gy += 1;
+        if (inputState.ArrowLeft) gx -= 1;
+        if (inputState.ArrowRight) gx += 1;
+
+        const magnitude = Math.hypot(gx, gy);
+        if (magnitude > 0) {
+          gx /= magnitude;
+          gy /= magnitude;
+        }
+
+        ball.vx += gx * physics.gStrength * deltaSeconds;
+        ball.vy += gy * physics.gStrength * deltaSeconds;
+
+        ball.x += ball.vx * deltaSeconds;
+        ball.y += ball.vy * deltaSeconds;
+
+        const { radius } = ball;
+
+        if (ball.x < radius) {
+          ball.x = radius;
+          ball.vx *= -physics.bounce;
+        } else if (ball.x > canvas.width - radius) {
+          ball.x = canvas.width - radius;
+          ball.vx *= -physics.bounce;
+        }
+
+        if (ball.y < radius) {
+          ball.y = radius;
+          ball.vy *= -physics.bounce;
+        } else if (ball.y > canvas.height - radius) {
+          ball.y = canvas.height - radius;
+          ball.vy *= -physics.bounce;
+        }
+      }
+
+      function render() {
+        // Background gradient.
+        const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, '#0a0e1a');
+        gradient.addColorStop(1, '#132347');
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw stars as subtle background effect.
+        context.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        for (let i = 0; i < 40; i += 1) {
+          const x = (i * 97) % canvas.width;
+          const y = (i * 47) % canvas.height;
+          context.beginPath();
+          context.arc(x, y, 2, 0, Math.PI * 2);
+          context.fill();
+        }
+
+        // Draw the moving circle.
+        context.beginPath();
+        context.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        context.fillStyle = '#4fc3f7';
+        context.fill();
+        context.lineWidth = 4;
+        context.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        context.stroke();
+      }
+
+      function gameLoop(timestamp) {
+        if (!isRunning) return;
+
+        const frameTime = timestamp - lastTimestamp;
+        lastTimestamp = timestamp;
+        accumulator += frameTime;
+
+        while (accumulator >= TIMESTEP) {
+          update(physics.dt);
+          accumulator -= TIMESTEP;
+        }
+
+        render();
+        animationFrameId = requestAnimationFrame(gameLoop);
+      }
+
+      function startGame() {
+        if (isRunning) return;
+        isRunning = true;
+        lastTimestamp = performance.now();
+        accumulator = 0;
+        animationFrameId = requestAnimationFrame(gameLoop);
+      }
+
+      function stopGame() {
+        isRunning = false;
+        if (animationFrameId !== null) {
+          cancelAnimationFrame(animationFrameId);
+          animationFrameId = null;
+        }
+      }
+
+      function resetGame() {
+        stopGame();
+        resetBall();
+        render();
+        startGame();
+      }
+
+      window.startGame = startGame;
+      window.resetGame = resetGame;
+
+      // Initialize the scene before the game starts.
+      resetBall();
+      render();
+      startGame();
+    </script>
+  </body>
+</html>
